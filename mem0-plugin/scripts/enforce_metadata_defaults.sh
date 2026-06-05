@@ -27,13 +27,13 @@ TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // ""' 2>/dev/null)
 # Determine which handler to use based on tool name
 HANDLER=""
 case "$TOOL_NAME" in
-  mcp__mem0__add_memory|mcp__plugin_mem0_mem0__add_memory)
+  mcp__mem0__add_memory|mcp__mem0_self__add_memory|mcp__mem0-self__add_memory|mcp__plugin_mem0_mem0__add_memory)
     HANDLER="add_memory" ;;
-  mcp__mem0__search_memories|mcp__plugin_mem0_mem0__search_memories)
+  mcp__mem0__search_memories|mcp__mem0_self__search_memories|mcp__mem0-self__search_memories|mcp__plugin_mem0_mem0__search_memories)
     HANDLER="search_memories" ;;
-  mcp__mem0__get_memories|mcp__plugin_mem0_mem0__get_memories)
+  mcp__mem0__get_memories|mcp__mem0_self__get_memories|mcp__mem0-self__get_memories|mcp__plugin_mem0_mem0__get_memories)
     HANDLER="get_memories" ;;
-  mcp__mem0__delete_all_memories|mcp__plugin_mem0_mem0__delete_all_memories)
+  mcp__mem0__delete_all_memories|mcp__mem0_self__delete_all_memories|mcp__mem0-self__delete_all_memories|mcp__plugin_mem0_mem0__delete_all_memories)
     HANDLER="delete_all" ;;
   *) exit 0 ;;
 esac

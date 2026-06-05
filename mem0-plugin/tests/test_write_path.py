@@ -2,7 +2,7 @@
 
 Verifies that all scripts writing to the Mem0 API:
 1. Pass app_id as a top-level parameter (not in metadata)
-2. Do NOT include project_id in metadata
+2. Include project_id in metadata for self-host post-filter compatibility
 3. Include branch in metadata when available
 4. Use resolve_api_key() for key resolution with userConfig fallback
 """
@@ -14,7 +14,7 @@ from unittest.mock import MagicMock, patch
 
 
 def test_auto_import_post_memory_uses_app_id():
-    """auto_import.post_memory sends app_id top-level, not metadata.project_id."""
+    """auto_import.post_memory sends app_id top-level and project_id metadata."""
     from auto_import import post_memory
 
     captured = {}
@@ -41,7 +41,7 @@ def test_auto_import_post_memory_uses_app_id():
     assert result is True
     assert captured["app_id"] == "my-project"
     assert captured["user_id"] == "testuser"
-    assert "project_id" not in captured.get("metadata", {})
+    assert captured["metadata"]["project_id"] == "my-project"
     assert captured["metadata"]["type"] == "project_profile"
     assert captured["metadata"]["branch"] == "main"
     assert captured["infer"] is False
@@ -69,7 +69,7 @@ def test_auto_import_post_memory_omits_empty_branch():
 
 
 def test_on_pre_compact_store_memory_uses_app_id():
-    """on_pre_compact.store_memory sends app_id top-level."""
+    """on_pre_compact.store_memory sends app_id top-level and project_id metadata."""
     from on_pre_compact import store_memory
 
     captured = {}
@@ -97,7 +97,7 @@ def test_on_pre_compact_store_memory_uses_app_id():
     assert result is True
     assert captured["app_id"] == "my-project"
     assert captured["user_id"] == "testuser"
-    assert "project_id" not in captured.get("metadata", {})
+    assert captured["metadata"]["project_id"] == "my-project"
     assert captured["metadata"]["type"] == "session_state"
     assert captured["metadata"]["source"] == "pre-compaction"
     assert captured["metadata"]["branch"] == "feat/auth"
@@ -105,7 +105,7 @@ def test_on_pre_compact_store_memory_uses_app_id():
 
 
 def test_capture_compact_summary_store_uses_app_id():
-    """capture_compact_summary.store_summary sends app_id top-level."""
+    """capture_compact_summary.store_summary sends app_id top-level and project_id metadata."""
     from capture_compact_summary import store_summary
 
     captured = {}
@@ -132,15 +132,15 @@ def test_capture_compact_summary_store_uses_app_id():
     assert result is True
     assert captured["app_id"] == "my-project"
     assert captured["user_id"] == "testuser"
-    assert "project_id" not in captured.get("metadata", {})
+    assert captured["metadata"]["project_id"] == "my-project"
     assert captured["metadata"]["type"] == "compact_summary"
     assert captured["metadata"]["branch"] == "main"
     assert captured["infer"] is True
     assert "expiration_date" in captured
 
 
-def test_no_metadata_project_id_anywhere():
-    """Ensure none of the write functions put project_id in metadata."""
+def test_metadata_project_id_injected_for_selfhost_filters():
+    """Ensure write functions include metadata.project_id for self-host post-filtering."""
     from auto_import import post_memory
     from capture_compact_summary import store_summary
     from on_pre_compact import store_memory
@@ -163,7 +163,7 @@ def test_no_metadata_project_id_anywhere():
 
     for i, body in enumerate(bodies):
         metadata = body.get("metadata", {})
-        assert "project_id" not in metadata, f"Write function #{i} still has metadata.project_id"
+        assert metadata.get("project_id") == "proj", f"Write function #{i} missing metadata.project_id"
         assert body.get("app_id") == "proj", f"Write function #{i} missing app_id top-level"
 
 

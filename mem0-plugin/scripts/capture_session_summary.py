@@ -18,11 +18,10 @@ import logging
 import os
 import re
 import sys
-import urllib.error
-import urllib.request
 from datetime import date, timedelta
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _mem0_client
 from _identity import resolve_api_key, resolve_user_id
 from _project import resolve_branch, resolve_project_id
 
@@ -42,7 +41,6 @@ if os.environ.get("MEM0_DEBUG"):
     except OSError:
         pass
 
-API_URL = "https://api.mem0.ai"
 MAX_TAIL_LINES = 3000
 MAX_SUMMARY_CHARS = 50000
 SUMMARY_EXPIRY_DAYS = 90
@@ -165,46 +163,34 @@ def store_summary(
     files: list[str],
 ) -> bool:
     expires = (date.today() + timedelta(days=SUMMARY_EXPIRY_DAYS)).isoformat()
-    metadata = {
-        "type": "session_summary",
-        "source": "stop-hook",
-        "session_id": session_id,
-    }
-    if branch:
-        metadata["branch"] = branch
-    if files:
-        metadata["files_touched"] = json.dumps(files[:20])
-
-    body = {
-        "messages": [{"role": "user", "content": summary_prompt}],
-        "user_id": user_id,
-        "app_id": project_id,
-        "run_id": session_id,
-        "metadata": metadata,
-        "infer": True,
-        "expiration_date": expires,
-    }
-
-    data = json.dumps(body).encode("utf-8")
-    req = urllib.request.Request(
-        f"{API_URL}/v3/memories/add/",
-        data=data,
-        headers={
-            "Content-Type": "application/json",
-            "Authorization": f"Token {api_key}",
-        },
-        method="POST",
+    metadata = _mem0_client.build_metadata(
+        {"files_touched": json.dumps(files[:20])} if files else {},
+        memory_type="session_summary",
+        source="stop-hook",
+        user_id=user_id,
+        app_id=project_id,
+        project_id=project_id,
+        session_id=session_id,
+        branch=branch,
     )
-    try:
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            if resp.status in (200, 201):
-                log.info("Session summary stored")
-                return True
-            log.warning("API returned status %d", resp.status)
-            return False
-    except urllib.error.URLError as e:
-        log.warning("API call failed: %s", e)
+    client = _mem0_client.create_client()
+    if api_key:
+        client.api_key = api_key
+    result = _mem0_client.add_memory(
+        [{"role": "user", "content": summary_prompt}],
+        user_id=user_id,
+        app_id=project_id,
+        run_id=session_id,
+        metadata=metadata,
+        infer=True,
+        expiration_date=expires,
+        client=client,
+    )
+    if result.get("status") in ("error", "unsupported"):
+        log.warning("API call failed: %s", result.get("message", result))
         return False
+    log.info("Session summary stored")
+    return True
 
 
 def main():

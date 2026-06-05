@@ -1,8 +1,8 @@
 {
   "mcpServers": {
-    "mem0": {
-      "url": "https://mcp.mem0.ai/mcp",
-      "bearer_token_env_var": "MEM0_API_KEY"
+    "mem0-self": {
+      "command": "python3",
+      "args": ["${PLUGIN_ROOT}/scripts/mcp_bridge.py"]
     }
   }
 }

@@ -1,0 +1,14 @@
+{
+  "task_id": "0605_mem0_selfhost_codex_plugin_prd_d_line",
+  "verification_status": "designed_before_implementation",
+  "sources": [
+    "feature_doc/0605_mem0_selfhost_codex_plugin_prd/prd.md",
+    "feature_doc/0605_mem0_selfhost_codex_plugin_prd/subfeatures.md",
+    "mem0-plugin/README.md",
+    "server/main.py",
+    "server/auth.py"
+  ],
+  "open_questions": [
+    "C line MCP bridge command path is not available yet; smoke currently validates the equivalent self-host REST chain."
+  ]
+}

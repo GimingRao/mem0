@@ -126,6 +126,107 @@ codex plugin marketplace upgrade               # pull latest plugin versions
 codex plugin marketplace remove mem0-plugins   # unregister the marketplace
 ```
 
+### Codex Self-Hosted
+
+Use this path when Codex should connect to your own Mem0 REST server instead of Mem0 Cloud.
+
+This self-host build is based on the native Mem0 plugin. The goal is not to maintain a separate plugin from scratch, but to keep the official skills, hooks, prompt behavior, and memory workflows while replacing only the backend connection layer.
+
+#### What changed from the native Mem0 plugin
+
+The native plugin assumes the hosted Mem0 services:
+
+- MCP tools connect to `https://mcp.mem0.ai/mcp`
+- lifecycle hooks write/search through `https://api.mem0.ai/v3`
+- Cloud APIs provide nested metadata filtering, event status, and entity/category behavior
+
+The self-host overlay adds these pieces:
+
+| Area | Native plugin | Self-host overlay |
+|------|---------------|-------------------|
+| Codex MCP | Remote Streamable HTTP MCP at `mcp.mem0.ai` | Local stdio MCP bridge named `mem0-self` |
+| Backend URL | Fixed Cloud endpoints | Configurable `MEM0_SELFHOST_API_URL` |
+| Provider mode | Cloud only | `MEM0_PROVIDER=cloud` or `MEM0_PROVIDER=selfhost` |
+| API key | `MEM0_API_KEY` for Cloud | `MEM0_SELFHOST_API_KEY` or `MEM0_SELFHOST_API_KEY_FILE` |
+| Hook write/search path | Direct Cloud HTTP calls | Shared `_mem0_client.py` provider adapter |
+| Self-host REST compatibility | Not applicable | `_selfhost.py` translates add/search/get/update/delete/list |
+| Metadata filters | Cloud nested filters | Remote coarse filter by `user_id`, local post-filter by `app_id`, `project_id`, `type`, and `source` |
+| Memory type | Cloud semantics | Stored as metadata `type` unless the server explicitly supports a REST memory type |
+| Cloud-only APIs | Full events/entities/categories | Explicit `partial` or `unsupported` shims when self-host lacks equivalent endpoints |
+| Transport | Cloud HTTPS | Direct HTTP, direct HTTPS, or SSH-to-remote-localhost |
+| Operations | Cloud dashboard/API health | Local installer, health check, and smoke test scripts |
+
+The important maintenance rule is that self-host differences should stay in the adapter, bridge, installer, and docs. Official skills and hook orchestration should stay close to upstream so the fork can be rebased when `mem0ai/mem0` changes.
+
+#### Install
+
+```bash
+git clone https://github.com/<org>/mem0-selfhost-codex.git ~/codex-plugins/mem0-selfhost
+cd ~/codex-plugins/mem0-selfhost
+./scripts/install.sh --api-url https://mem0.example.com --transport https --user-id "$USER"
+```
+
+The installer writes non-secret settings to `~/.mem0/settings.json`. If you pass `--api-key`, it writes the key to `~/.mem0/selfhost-api-key` with `0600` permissions and stores only the key file path in settings. It never writes plaintext keys to the repository.
+
+Equivalent manual configuration:
+
+```bash
+mkdir -p ~/.mem0
+chmod 700 ~/.mem0
+printf '%s\n' '<api-key>' > ~/.mem0/selfhost-api-key
+chmod 600 ~/.mem0/selfhost-api-key
+
+export MEM0_PROVIDER=selfhost
+export MEM0_SELFHOST_API_URL=https://mem0.example.com
+export MEM0_SELFHOST_API_KEY_FILE=$HOME/.mem0/selfhost-api-key
+export MEM0_SELFHOST_TRANSPORT=https
+export MEM0_USER_ID="$USER"
+```
+
+#### Transport modes
+
+Transport modes:
+
+| Mode | Use When | Security Notes |
+|------|----------|----------------|
+| `http` | Local demos or trusted private networks | Sends `X-API-Key` over plaintext. Do not use on public networks. |
+| `https` | Production public or shared endpoints | Recommended mode. Terminate TLS at your gateway or Mem0 server. |
+| `ssh` | Mem0 only listens on remote localhost | Private mode. The local script runs `curl` through `ssh` to the remote API URL. |
+
+SSH mode configuration:
+
+```bash
+./scripts/install.sh \
+  --api-url http://127.0.0.1:8000 \
+  --transport ssh \
+  --ssh-host mem0-box \
+  --remote-api-url http://127.0.0.1:8000 \
+  --user-id "$USER"
+```
+
+Health and smoke test:
+
+```bash
+python3 mem0-plugin/scripts/selfhost_health.py --format text
+python3 mem0-plugin/scripts/selfhost_smoke.py --format text
+```
+
+Health reports `provider`, `transport`, `api_url`, `auth`, `add`, `search`, `metadata_filter`, and `warnings`. Failures are classified as:
+
+| Category | Meaning |
+|----------|---------|
+| `endpoint` | URL, DNS, connection, TLS, timeout, or wrong route |
+| `auth` | Missing or rejected `X-API-Key` / bearer auth |
+| `schema` | Request/response shape or JSON contract mismatch |
+| `filter` | Add/search works, but metadata-filtered recall is not correct |
+| `runtime` | Server-side error or local SSH/curl execution failure |
+
+Do not combine self-host configuration with a separate cloud `[mcp_servers.mem0]` block in `~/.codex/config.toml`; duplicate registrations expose duplicate tools and make health results ambiguous.
+
+#### Verification notes
+
+The self-host bridge is expected to pass add/get/delete against a reachable Mem0 REST server. Search behavior depends on the self-host server's indexing and filter semantics. The adapter always sends `user_id` as the remote coarse filter and then applies project/type/source filtering locally when the server response shape allows it.
+
 ### Cursor
 
 > **Already have `mem0` configured as an MCP server?** Remove the existing entry from your Cursor MCP settings before installing to avoid duplicate tools.
