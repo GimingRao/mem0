@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+import importlib
 
 import pytest
 
@@ -32,6 +33,20 @@ def _clean_project_map(monkeypatch):
     yield
     if os.path.isfile(map_path):
         os.remove(map_path)
+
+
+@pytest.fixture(autouse=True)
+def _isolate_mem0_settings(monkeypatch, tmp_path):
+    """Keep tests from reading the user's real ~/.mem0/settings.json."""
+    settings_path = tmp_path / "settings.json"
+    for module_name in ("_mem0_client", "_selfhost_config", "load_settings"):
+        try:
+            module = sys.modules.get(module_name) or importlib.import_module(module_name)
+        except ImportError:
+            continue
+        if module is not None and hasattr(module, "SETTINGS_PATH"):
+            monkeypatch.setattr(module, "SETTINGS_PATH", settings_path)
+    yield
 
 
 @pytest.fixture()

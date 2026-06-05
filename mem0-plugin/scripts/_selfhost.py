@@ -54,7 +54,8 @@ def _request(config: SelfhostConfig, method: str, path: str, payload: dict[str, 
     data = json.dumps(payload).encode("utf-8") if payload is not None else None
     req = urllib.request.Request(url, data=data, headers=_headers(config), method=method)
     try:
-        with urllib.request.urlopen(req, timeout=config.timeout) as resp:
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        with opener.open(req, timeout=config.timeout) as resp:
             raw = resp.read()
             if not raw:
                 return {"status": "success"}

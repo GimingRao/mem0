@@ -129,7 +129,8 @@ def _request_http(
     body = json.dumps(payload).encode() if payload is not None else None
     req = urllib.request.Request(url, data=body, headers=_headers(config), method=method)
     start = time.perf_counter()
-    with urllib.request.urlopen(req, timeout=config.timeout) as response:
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    with opener.open(req, timeout=config.timeout) as response:
         raw = response.read()
         latency_ms = int((time.perf_counter() - start) * 1000)
         if not raw:

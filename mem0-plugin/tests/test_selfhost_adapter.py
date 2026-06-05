@@ -15,6 +15,12 @@ def _mock_response(payload):
     return resp
 
 
+def _patch_opener_open(side_effect):
+    opener = MagicMock()
+    opener.open.side_effect = side_effect
+    return patch("urllib.request.build_opener", return_value=opener)
+
+
 def test_add_writes_app_scope_to_metadata_not_rest_memory_type():
     from _selfhost import SelfhostConfig, add_memory
 
@@ -26,7 +32,7 @@ def test_add_writes_app_scope_to_metadata_not_rest_memory_type():
         captured["body"] = json.loads(req.data.decode("utf-8"))
         return _mock_response({"results": [{"id": "m1", "memory": "Stored"}]})
 
-    with patch("urllib.request.urlopen", side_effect=mock_urlopen):
+    with _patch_opener_open(mock_urlopen):
         add_memory(
             SelfhostConfig("https://mem0.example.com", "secret"),
             {
@@ -91,7 +97,7 @@ def test_search_sends_only_user_id_remotely_and_post_filters_metadata():
             {"metadata": {"source": "manual"}},
         ]
     }
-    with patch("urllib.request.urlopen", side_effect=mock_urlopen):
+    with _patch_opener_open(mock_urlopen):
         response = search_memories(
             SelfhostConfig("https://mem0.example.com", "secret"),
             {"query": "database", "filters": filters, "top_k": 10},
@@ -116,7 +122,7 @@ def test_get_memories_uses_user_id_query_and_local_project_filter():
             }
         )
 
-    with patch("urllib.request.urlopen", side_effect=mock_urlopen):
+    with _patch_opener_open(mock_urlopen):
         response = get_memories(
             SelfhostConfig("https://mem0.example.com", "secret"),
             {"filters": {"AND": [{"user_id": "user-1"}, {"project_id": "proj"}]}},
@@ -135,7 +141,7 @@ def test_update_translates_data_to_selfhost_text_field():
         captured["body"] = json.loads(req.data.decode("utf-8"))
         return _mock_response({"message": "updated"})
 
-    with patch("urllib.request.urlopen", side_effect=mock_urlopen):
+    with _patch_opener_open(mock_urlopen):
         update_memory(SelfhostConfig("https://mem0.example.com", "secret"), "m1", {"data": "new text"})
 
     assert captured["url"] == "https://mem0.example.com/memories/m1"
