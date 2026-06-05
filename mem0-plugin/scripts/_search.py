@@ -6,24 +6,20 @@ All pre-fetch hooks use this instead of duplicating urllib boilerplate.
 
 from __future__ import annotations
 
-import json
-import urllib.request
+import os
+from typing import Any
 
-SEARCH_URL = "https://api.mem0.ai/v3/memories/search/"
+import _mem0_client
+
 SEARCH_TIMEOUT = 5
 
 
-def _do_search(api_key: str, payload: dict) -> list[dict]:
-    body = json.dumps(payload).encode()
-    req = urllib.request.Request(
-        SEARCH_URL,
-        data=body,
-        headers={"Authorization": f"Token {api_key}", "Content-Type": "application/json"},
-        method="POST",
-    )
-    with urllib.request.urlopen(req, timeout=SEARCH_TIMEOUT) as r:
-        data = json.loads(r.read())
-        return data if isinstance(data, list) else data.get("results", [])
+def _do_search(api_key: str, payload: dict[str, Any]) -> list[dict]:
+    client = _mem0_client.create_client()
+    if api_key:
+        client.api_key = api_key
+    response = _mem0_client.search_memories(client=client, **payload)
+    return _mem0_client.normalize_results(response)
 
 
 def search_memories(
@@ -40,6 +36,14 @@ def search_memories(
     global_search: bool = False,
 ) -> list[dict]:
     if not api_key:
+        client = _mem0_client.create_client()
+        if not client.api_key:
+            return []
+    else:
+        client = _mem0_client.create_client()
+        client.api_key = api_key
+
+    if not client.api_key:
         return []
 
     if global_search:
@@ -58,8 +62,8 @@ def search_memories(
         base_payload["rerank"] = True
 
     try:
-        payload = {**base_payload, "filters": filters}
-        results = _do_search(api_key, payload)[:top_k]
+        payload = {**base_payload, "user_id": user_id, "filters": filters}
+        results = _mem0_client.normalize_results(_mem0_client.search_memories(client=client, **payload))[:top_k]
 
         if min_score > 0:
             results = [m for m in results if m.get("score", 0) >= min_score]

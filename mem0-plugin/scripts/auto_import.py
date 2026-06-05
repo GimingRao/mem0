@@ -17,10 +17,9 @@ import json
 import logging
 import os
 import sys
-import urllib.error
-import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _mem0_client
 from _chunking import filter_and_truncate, split_by_headers
 from _identity import resolve_api_key, resolve_user_id
 from _project import resolve_branch, resolve_project_id, save_project_mapping
@@ -41,7 +40,6 @@ if os.environ.get("MEM0_DEBUG"):
     except OSError:
         pass
 
-API_URL = "https://api.mem0.ai"
 MAX_FILE_SIZE = 100_000  # skip files over 100 KB
 TARGET_FILES = ["CLAUDE.md", "AGENTS.md", ".cursorrules", ".windsurfrules", "mem0.md"]
 HASH_STORE = os.path.expanduser("~/.mem0/file_hashes.json")
@@ -122,88 +120,59 @@ def save_hashes(hashes: dict[str, str]) -> None:
 
 
 def already_imported(api_key: str, user_id: str, project_id: str, filename: str) -> bool:
-    body = json.dumps({
-        "query": filename,
-        "filters": {
-            "AND": [
-                {"user_id": user_id},
-                {"app_id": project_id},
-                {"metadata": {"source": "auto-import"}},
-            ]
-        },
-        "top_k": 10,
-        "threshold": 0.0,
-    }).encode()
-    req = urllib.request.Request(
-        f"{API_URL}/v3/memories/search/",
-        data=body,
-        headers={"Content-Type": "application/json", "Authorization": f"Token {api_key}"},
-        method="POST",
-    )
+    filters = {
+        "AND": [
+            {"user_id": user_id},
+            {"app_id": project_id},
+            {"metadata": {"source": "auto-import"}},
+        ]
+    }
     try:
-        with urllib.request.urlopen(req, timeout=5) as r:
-            data = json.loads(r.read())
-            results = data if isinstance(data, list) else data.get("results", [])
-            for result in results:
-                meta = result.get("metadata", {}) if isinstance(result, dict) else {}
-                file_field = meta.get("file", "")
-                if file_field == filename or file_field.startswith(f"{filename}["):
-                    return True
-            return False
+        client = _client_with_key(api_key)
+        data = _mem0_client.search_memories(filename, user_id=user_id, app_id=project_id, filters=filters, top_k=10, threshold=0.0, client=client)
+        for result in _mem0_client.normalize_results(data):
+            meta = result.get("metadata", {}) if isinstance(result, dict) else {}
+            file_field = meta.get("file", "")
+            if file_field == filename or file_field.startswith(f"{filename}["):
+                return True
+        return False
     except Exception:
         return False
 
 
 def _delete_stale_chunks(api_key: str, user_id: str, project_id: str, filename: str) -> int:
     """Find and delete existing chunks for a file before re-import. Returns count deleted."""
-    body = json.dumps({
-        "query": filename,
-        "filters": {
-            "AND": [
-                {"user_id": user_id},
-                {"app_id": project_id},
-                {"metadata": {"source": "auto-import"}},
-            ]
-        },
-        "top_k": 20,
-        "threshold": 0.0,
-    }).encode()
-    req = urllib.request.Request(
-        f"{API_URL}/v3/memories/search/",
-        data=body,
-        headers={"Content-Type": "application/json", "Authorization": f"Token {api_key}"},
-        method="POST",
-    )
+    filters = {
+        "AND": [
+            {"user_id": user_id},
+            {"app_id": project_id},
+            {"metadata": {"source": "auto-import"}},
+        ]
+    }
     ids_to_delete = []
     try:
-        with urllib.request.urlopen(req, timeout=10) as r:
-            data = json.loads(r.read())
-            results = data if isinstance(data, list) else data.get("results", [])
-            for result in results:
-                if not isinstance(result, dict):
-                    continue
-                meta = result.get("metadata", {})
-                file_field = meta.get("file", "")
-                if file_field == filename or file_field.startswith(f"{filename}["):
-                    mid = result.get("id")
-                    if mid:
-                        ids_to_delete.append(mid)
+        client = _client_with_key(api_key)
+        data = _mem0_client.search_memories(filename, user_id=user_id, app_id=project_id, filters=filters, top_k=20, threshold=0.0, client=client)
+        for result in _mem0_client.normalize_results(data):
+            if not isinstance(result, dict):
+                continue
+            meta = result.get("metadata", {})
+            file_field = meta.get("file", "")
+            if file_field == filename or file_field.startswith(f"{filename}["):
+                mid = result.get("id")
+                if mid:
+                    ids_to_delete.append(mid)
     except Exception as e:
         log.warning("Failed to search for stale chunks of %s: %s", filename, e)
         return 0
 
     deleted = 0
     for mid in ids_to_delete:
-        try:
-            del_req = urllib.request.Request(
-                f"{API_URL}/v1/memories/{mid}/",
-                headers={"Authorization": f"Token {api_key}"},
-                method="DELETE",
-            )
-            with urllib.request.urlopen(del_req, timeout=10):
-                deleted += 1
-        except Exception as e:
-            log.warning("Failed to delete stale chunk %s: %s", mid, e)
+        result = _mem0_client.delete_memory(mid, client=_client_with_key(api_key))
+        if result.get("status") == "error":
+            log.warning("Failed to delete stale chunk %s: %s", mid, result.get("message", result))
+        else:
+            deleted += 1
 
     if deleted:
         log.info("Deleted %d stale chunk(s) for %s before re-import", deleted, filename)
@@ -212,47 +181,40 @@ def _delete_stale_chunks(api_key: str, user_id: str, project_id: str, filename: 
 
 def post_memory(api_key: str, content: str, user_id: str, filename: str, project_id: str, branch: str = "") -> bool:
     """POST a project profile memory to the Mem0 REST API."""
-    metadata = {
-        "type": "project_profile",
-        "file": filename,
-        "source": "auto-import",
-    }
-    if branch:
-        metadata["branch"] = branch
-    body = {
-        "messages": [
+    metadata = _mem0_client.build_metadata(
+        {"file": filename},
+        memory_type="project_profile",
+        source="auto-import",
+        user_id=user_id,
+        app_id=project_id,
+        project_id=project_id,
+        branch=branch,
+    )
+    result = _mem0_client.add_memory(
+        [
             {
                 "role": "user",
                 "content": f"## Project Profile: {filename}\n\nProject: {project_id}\n\n{content}",
             }
         ],
-        "user_id": user_id,
-        "app_id": project_id,
-        "metadata": metadata,
-        "infer": False,
-    }
-
-    data = json.dumps(body).encode("utf-8")
-    req = urllib.request.Request(
-        f"{API_URL}/v3/memories/add/",
-        data=data,
-        headers={
-            "Content-Type": "application/json",
-            "Authorization": f"Token {api_key}",
-        },
-        method="POST",
+        user_id=user_id,
+        app_id=project_id,
+        metadata=metadata,
+        infer=False,
+        client=_client_with_key(api_key),
     )
-
-    try:
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            if resp.status in (200, 201):
-                log.info("Imported %s (project=%s)", filename, project_id)
-                return True
-            log.warning("API returned status %d for %s", resp.status, filename)
-            return False
-    except urllib.error.URLError as e:
-        log.warning("API call failed for %s: %s", filename, e)
+    if result.get("status") in ("error", "unsupported"):
+        log.warning("API call failed for %s: %s", filename, result.get("message", result))
         return False
+    log.info("Imported %s (project=%s)", filename, project_id)
+    return True
+
+
+def _client_with_key(api_key: str) -> _mem0_client.Mem0Client:
+    client = _mem0_client.create_client()
+    if api_key:
+        client.api_key = api_key
+    return client
 
 
 def main() -> None:

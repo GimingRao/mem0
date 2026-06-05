@@ -101,6 +101,29 @@ def test_search_memories_no_api_key_returns_empty():
     assert results == []
 
 
+def test_search_memories_selfhost_does_not_require_cloud_api_key(monkeypatch):
+    from _search import search_memories
+
+    monkeypatch.setenv("MEM0_PROVIDER", "selfhost")
+    monkeypatch.setenv("MEM0_SELFHOST_API_URL", "https://mem0.example.com")
+    monkeypatch.setenv("MEM0_SELFHOST_API_KEY", "selfhost-key")
+
+    captured = {}
+
+    def mock_client_search(**kwargs):
+        captured["kwargs"] = kwargs
+        return {"results": [{"id": "m1", "memory": "Self-host result", "metadata": {"type": "decision"}}]}
+
+    monkeypatch.setattr("_mem0_client.search_memories", mock_client_search)
+
+    results = search_memories("", "user", "proj", "query", metadata_type="decision")
+
+    assert results == [{"id": "m1", "memory": "Self-host result", "metadata": {"type": "decision"}}]
+    assert captured["kwargs"]["user_id"] == "user"
+    assert {"metadata": {"type": "decision"}} in captured["kwargs"]["filters"]["AND"]
+    assert captured["kwargs"]["client"].provider == "selfhost"
+
+
 def test_format_results_for_context():
     from _search import format_results_for_context
 

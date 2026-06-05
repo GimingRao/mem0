@@ -71,26 +71,21 @@ fi
 
 MEM0_COUNT="?"
 if command -v python3 >/dev/null 2>&1; then
-  MEM0_COUNT=$(python3 -c "
-import json, os, urllib.request, urllib.error
-api_key = os.environ.get('MEM0_API_KEY', '')
+  MEM0_COUNT=$(PYTHONPATH="$SCRIPT_DIR" python3 -c "
+import os
+from _mem0_client import create_client, get_memories
+
 user_id = os.environ.get('MEM0_RESOLVED_USER_ID', 'default')
 app_id = os.environ.get('MEM0_PROJECT_ID', '')
 global_search = os.environ.get('MEM0_GLOBAL_SEARCH', 'false') == 'true'
 
 def get_count(filters):
-    body = json.dumps({'filters': filters}).encode()
-    req = urllib.request.Request(
-        'https://api.mem0.ai/v3/memories/?page=1&page_size=1',
-        headers={'Authorization': f'Token {api_key}', 'Content-Type': 'application/json'},
-        data=body, method='POST',
-    )
-    with urllib.request.urlopen(req, timeout=5) as r:
-        data = json.loads(r.read())
-        if isinstance(data, dict) and 'count' in data:
-            return data['count']
-        if isinstance(data, list):
-            return len(data)
+    client = create_client()
+    data = get_memories(filters=filters, page=1, page_size=1, client=client)
+    if isinstance(data, dict) and 'count' in data:
+        return data['count']
+    if isinstance(data, dict) and isinstance(data.get('results'), list):
+        return len(data['results'])
     return 0
 
 try:

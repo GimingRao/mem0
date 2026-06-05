@@ -1,0 +1,48 @@
+{
+  "line": "A",
+  "name": "Fork / Release / Upgrade maintenance",
+  "status": "implemented",
+  "timestamp": "2026-06-05",
+  "upstream_base": {
+    "repo": "https://github.com/mem0ai/mem0",
+    "ref": "upstream/main",
+    "commit": "90f2d24e832302c97e0daa55454b29657e742c15",
+    "codex_plugin_version": "0.2.9"
+  },
+  "selfhost_distribution": {
+    "branch": "selfhost/main",
+    "release_branch": "selfhost/release",
+    "plugin_id": "mem0-self",
+    "tag_pattern": "codex-mem0-<official-plugin-version>-selfhost.<patch>",
+    "first_tag": "codex-mem0-0.2.9-selfhost.1"
+  },
+  "artifacts": [
+    "UPSTREAM.md",
+    "docs/self-hosted-codex-plugin/compatibility-matrix.md",
+    "docs/self-hosted-codex-plugin/upgrade-guide.md",
+    "docs/self-hosted-codex-plugin/release-checklist.md",
+    "scripts/selfhost-fork-diff.py",
+    "scripts/selfhost-release-note.py",
+    "feature_doc/0605_mem0_selfhost_codex_plugin_prd/design_A_fork_release_upgrade.md"
+  ],
+  "handoff_to_other_lines": {
+    "B": [
+      "Keep self-host backend differences inside mem0-plugin/scripts/_mem0_client.py and mem0-plugin/scripts/_selfhost.py or update UPSTREAM.md with a justified overlay path.",
+      "Preserve Cloud behavior when MEM0_PROVIDER=cloud."
+    ],
+    "C": [
+      "Avoid rewriting official skills and hook orchestration; route backend calls through the shared adapter.",
+      "Return explicit unsupported or shim responses for degraded self-host MCP tools."
+    ],
+    "D": [
+      "Attach health and smoke-test output to release notes.",
+      "Keep install scripts from writing API keys, personal endpoints, or local machine paths into the repo."
+    ]
+  },
+  "open_questions": [
+    "Should Cloud fallback remain enabled by default when MEM0_PROVIDER is unset?",
+    "Will multiple self-host endpoint profiles be supported?",
+    "Is Cloud-to-self-host memory migration in scope for this fork?"
+  ]
+}
+

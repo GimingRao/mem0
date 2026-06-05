@@ -149,6 +149,29 @@ cd server && docker compose up -d    # http://localhost:3000
 
 See the [self-hosted docs](https://docs.mem0.ai/open-source/overview) for configuration.
 
+### Self-Hosted Codex Plugin Fork
+
+The `selfhost/main` branch is an upstream-first fork of `mem0ai/mem0` for a Codex plugin distribution named `mem0-self`.
+
+The native Mem0 repository already provides the memory SDKs, self-hosted server, Cloud MCP service, agent skills, and official editor plugin. This branch does not rewrite those pieces. It keeps the native plugin experience and adds a small self-host overlay so Codex can use a user-owned Mem0 REST server instead of `mcp.mem0.ai` / `api.mem0.ai`.
+
+What this branch adds on top of native Mem0:
+
+- A local Codex MCP bridge for `mem0-self`.
+- A provider-aware client that can choose `cloud` or `selfhost`.
+- A self-host REST adapter for add/search/get/update/delete/list operations.
+- Metadata and filter compatibility for self-host servers that do not support Cloud nested filters.
+- Lifecycle hook routing through the shared client instead of hard-coded Cloud URLs.
+- Installer, health, smoke-test, and HTTP/HTTPS/SSH transport support.
+- Maintenance docs and scripts for tracking the upstream base and keeping the fork diff small.
+
+Maintenance references:
+
+- Upstream base and branch/tag rules: [UPSTREAM.md](UPSTREAM.md)
+- Compatibility matrix: [docs/self-hosted-codex-plugin/compatibility-matrix.md](docs/self-hosted-codex-plugin/compatibility-matrix.md)
+- Upgrade guide: [docs/self-hosted-codex-plugin/upgrade-guide.md](docs/self-hosted-codex-plugin/upgrade-guide.md)
+- Release checklist: [docs/self-hosted-codex-plugin/release-checklist.md](docs/self-hosted-codex-plugin/release-checklist.md)
+
 ### Cloud Platform
 
 1. Sign up on [Mem0 Platform](https://app.mem0.ai?utm_source=oss&utm_medium=readme)
